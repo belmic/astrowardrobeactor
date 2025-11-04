@@ -141,22 +141,13 @@ export function getLargestImages(imageUrls) {
             return null;
         }
 
-        // For Mango, try to get original URL without size parameters but keep timestamp
+        // For Mango, keep the full URL with all parameters - they're required for access
+        // Mango requires imwidth, imdensity, and ts parameters for proper access
+        // The URL should be used as-is from the page
         if (url.includes('shop.mango.com') || url.includes('st.mngbcn.com') || url.includes('media.mango.com')) {
-            // Mango URLs: .../17001209.jpg?imwidth=2048&imdensity=1&ts=...
-            // Keep the base URL and timestamp, but remove size parameters
-            try {
-                const urlObj = new URL(url);
-                // Keep only timestamp parameter, remove size parameters
-                const params = new URLSearchParams(urlObj.search);
-                const timestamp = params.get('ts');
-                urlObj.search = timestamp ? `ts=${timestamp}` : '';
-                // Remove imwidth and imdensity
-                return urlObj.toString();
-            } catch (e) {
-                // If URL parsing fails, return original
-                return url;
-            }
+            // Return as-is - Mango requires these parameters for image access
+            // Filtering of small images is done in the extractor, not here
+            return url;
         }
 
         // Try to get largest variant by replacing size indicators

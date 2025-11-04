@@ -431,7 +431,15 @@ export async function extractFromSelectors(page, domain, baseUrl) {
         try {
             const element = await page.$(selector);
             if (element) {
-                const text = await element.textContent();
+                // Try textContent first, then innerHTML for formatted descriptions
+                let text = await element.textContent();
+                if (!text || !text.trim()) {
+                    const html = await element.innerHTML().catch(() => null);
+                    if (html) {
+                        // Clean HTML tags but keep text content
+                        text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                    }
+                }
                 if (text && text.trim()) {
                     result.description = normalizeEmpty(text.trim());
                     break;
@@ -1047,11 +1055,12 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                             if (lowerUrl.includes('colv3') || lowerUrl.includes('imwidth=40')) {
                                 return false;
                             }
-                            // Filter out outfit images that are not main product images
-                            // Keep main product images (fotos/S/) but be selective about outfit images
-                            if (lowerUrl.includes('outfit') && !lowerUrl.match(/17001209_07-99999999_01/)) {
-                                // Keep only specific outfit images if needed
-                                // For now, we'll keep them but you can filter more if needed
+                            // Filter out very small images (less than 200px width)
+                            if (lowerUrl.includes('imwidth=')) {
+                                const widthMatch = lowerUrl.match(/imwidth=(\d+)/);
+                                if (widthMatch && parseInt(widthMatch[1]) < 200) {
+                                    return false;
+                                }
                             }
                         }
                         return true;
