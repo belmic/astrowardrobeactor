@@ -41,11 +41,55 @@ const DOMAIN_SELECTORS = {
         ]
     },
     'shop.mango.com': {
-        title: ['h1.product-title', '.product-name h1', 'h1'],
-        description: ['.product-description', '.product-info-description', '.description'],
-        price: ['.product-price', '.price-current', '[data-testid="price"]'],
-        sku: ['[data-product-id]', '[data-sku]', '.product-reference'],
-        images: ['.product-images img', '.product-gallery img', '.product-image img']
+        title: ['h1.product-title', '.product-name h1', 'h1', '[data-testid="product-title"]', '.product-detail-title'],
+        description: [
+            '.product-description', 
+            '.product-info-description', 
+            '.description',
+            '[data-testid="product-description"]',
+            '.product-detail-description',
+            '.product-details-description',
+            '.product-info p'
+        ],
+        price: [
+            '.product-price', 
+            '.price-current', 
+            '[data-testid="price"]',
+            '.product-detail-price',
+            '.price',
+            '.product-price-current',
+            '[data-price]',
+            '.money-amount',
+            '.product-price-value'
+        ],
+        currency: [
+            '.product-price',
+            '.price-current',
+            '[data-currency]',
+            '.money-amount',
+            '[data-price-currency]'
+        ],
+        sku: [
+            '[data-product-id]', 
+            '[data-sku]', 
+            '.product-reference',
+            '[data-product-reference]',
+            '.product-code'
+        ],
+        images: [
+            '.product-images img',
+            '.product-gallery img',
+            '.product-image img',
+            '.product-detail-images img',
+            '.product-images-container img',
+            '.gallery img',
+            '.product-media img',
+            '[data-testid="product-image"] img',
+            'picture img',
+            'picture source',
+            '.product-carousel img',
+            '.product-slider img'
+        ]
     },
     'mango.com': {
         title: ['h1.product-title', '.product-name h1', 'h1'],
@@ -752,7 +796,8 @@ export async function extractFromSelectors(page, domain, baseUrl) {
 
     // Fallback: try to extract images from JSON data in page
     // Try JSON extraction even if we have some images, to get all possible images
-    if (result.images.length < 10) {
+    // For Mango, always try JSON extraction as they often use it
+    if (result.images.length < 10 || domain === 'shop.mango.com' || domain === 'mango.com') {
         try {
             // Try to extract from window.__INITIAL_STATE__ or similar
             const imageData = await page.evaluate(() => {
@@ -855,7 +900,9 @@ export async function extractFromSelectors(page, domain, baseUrl) {
     }
 
     // Additional fallback: wait for lazy-loaded images and extract them
-    if (domain === 'zara.com' && result.images.length < 6) {
+    // For Zara and Mango, try lazy loading extraction
+    if ((domain === 'zara.com' && result.images.length < 6) || 
+        ((domain === 'shop.mango.com' || domain === 'mango.com') && result.images.length === 0)) {
         try {
             // Wait a bit more for lazy-loaded images
             await page.waitForTimeout(3000);
@@ -894,8 +941,11 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                                    el.getAttribute('data-srcset') ||
                                    el.getAttribute('data-lazy') ||
                                    (el.srcset ? el.srcset.split(',')[0].trim().split(' ')[0] : null);
-                        // Only include Zara CDN images (since we're in Zara-specific block)
-                        if (src && src.includes('static.zara.net')) {
+                        // Include Zara CDN images or Mango CDN images
+                        if (src && (src.includes('static.zara.net') || 
+                                   src.includes('st.mngbcn.com') || 
+                                   src.includes('media.mango.com') ||
+                                   src.includes('mango.com'))) {
                             images.push(src);
                         }
                     }
@@ -927,6 +977,12 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                             }
                             // Additional check: must be a .jpg/.jpeg/.png/.webp file
                             if (!/\.(jpg|jpeg|png|webp)(\?|$)/i.test(lowerUrl)) {
+                                return false;
+                            }
+                        }
+                        // For Mango, ensure it's a valid image file
+                        if (domain === 'shop.mango.com' || domain === 'mango.com') {
+                            if (!/\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(lowerUrl)) {
                                 return false;
                             }
                         }
