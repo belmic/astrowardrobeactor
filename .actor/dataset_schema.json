@@ -4,6 +4,7 @@
     "default": {
       "title": "Fashion Product Data",
       "display": {
+        "component": "table",
         "type": "table"
       },
       "fields": [
