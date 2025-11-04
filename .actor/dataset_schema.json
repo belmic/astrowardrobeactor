@@ -3,6 +3,9 @@
   "views": {
     "default": {
       "title": "Fashion Product Data",
+      "display": {
+        "type": "table"
+      },
       "fields": [
         {
           "id": "url",
