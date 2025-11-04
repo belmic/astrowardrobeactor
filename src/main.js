@@ -41,8 +41,7 @@ Actor.main(async () => {
             launchOptions: {
                 headless: true,
                 args: ['--no-sandbox', '--disable-setuid-sandbox']
-            },
-            useChrome: true
+            }
         },
         preNavigationHooks: [
             async ({ page, request }) => {
