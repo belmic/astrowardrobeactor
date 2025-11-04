@@ -3,7 +3,10 @@ node_modules/
 
 # Apify
 .apify/
-.actor/
+.actor/*
+!.actor/actor.json
+!.actor/dataset_schema.json
+!.actor/INPUT_SCHEMA.json
 
 # Logs
 *.log
