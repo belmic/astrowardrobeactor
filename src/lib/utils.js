@@ -141,6 +141,24 @@ export function getLargestImages(imageUrls) {
             return null;
         }
 
+        // For Mango, try to get original URL without size parameters but keep timestamp
+        if (url.includes('shop.mango.com') || url.includes('st.mngbcn.com') || url.includes('media.mango.com')) {
+            // Mango URLs: .../17001209.jpg?imwidth=2048&imdensity=1&ts=...
+            // Keep the base URL and timestamp, but remove size parameters
+            try {
+                const urlObj = new URL(url);
+                // Keep only timestamp parameter, remove size parameters
+                const params = new URLSearchParams(urlObj.search);
+                const timestamp = params.get('ts');
+                urlObj.search = timestamp ? `ts=${timestamp}` : '';
+                // Remove imwidth and imdensity
+                return urlObj.toString();
+            } catch (e) {
+                // If URL parsing fails, return original
+                return url;
+            }
+        }
+
         // Try to get largest variant by replacing size indicators
         // Common patterns: _w500, _w800, _large, _xl, _xxl, ?w=500, ?width=800
         let largestUrl = url
@@ -157,8 +175,8 @@ export function getLargestImages(imageUrls) {
             return url;
         }
 
-        // For Zara, Mango - try to get original
-        if (largestUrl.includes('static.zara.net') || largestUrl.includes('st.mngbcn.com')) {
+        // For Zara - try to get original
+        if (largestUrl.includes('static.zara.net')) {
             // Try to remove size parameters
             largestUrl = largestUrl.split('?')[0];
             // Try common original size patterns

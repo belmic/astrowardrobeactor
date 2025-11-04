@@ -325,10 +325,22 @@ export function extractFromEmbeddedJson(embeddedJson, baseUrl) {
         result.description = normalizeEmpty(product.description || product.detail || product.longDescription);
     }
 
-    // Price
+    // Price - try multiple paths
     if (product.price !== undefined || product.priceValue !== undefined || product.finalPrice !== undefined) {
         const priceValue = product.price || product.priceValue || product.finalPrice;
         result.price = extractPrice(priceValue);
+    } else if (product.pricing) {
+        const pricing = product.pricing;
+        if (pricing.finalPrice !== undefined || pricing.price !== undefined || pricing.currentPrice !== undefined) {
+            const priceValue = pricing.finalPrice || pricing.price || pricing.currentPrice;
+            result.price = extractPrice(priceValue);
+        }
+    } else if (product.variants && Array.isArray(product.variants) && product.variants.length > 0) {
+        // Try first variant
+        const variant = product.variants[0];
+        if (variant.price !== undefined || variant.priceValue !== undefined) {
+            result.price = extractPrice(variant.price || variant.priceValue);
+        }
     }
 
     // Currency
@@ -807,10 +819,40 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                     window.productData,
                     window.product,
                     window.productImages,
-                    window.__NEXT_DATA__
+                    window.__NEXT_DATA__,
+                    window.__APOLLO_STATE__,
+                    window.productInfo
                 ];
                 
                 const foundImages = [];
+                
+                // Special handling for Mango - they often use __NEXT_DATA__
+                if (window.__NEXT_DATA__ && window.__NEXT_DATA__.props) {
+                    const props = window.__NEXT_DATA__.props;
+                    // Try to find product data in Next.js props
+                    const findInProps = (obj, depth = 0) => {
+                        if (depth > 4 || !obj || typeof obj !== 'object') return [];
+                        const result = [];
+                        for (const key in obj) {
+                            if (key === 'images' || key === 'gallery' || key === 'productImages' || 
+                                key === 'media' || key === 'photos' || key === 'pictures') {
+                                if (Array.isArray(obj[key])) {
+                                    result.push(...obj[key]);
+                                } else if (obj[key] && typeof obj[key] === 'object' && obj[key].images) {
+                                    result.push(...(Array.isArray(obj[key].images) ? obj[key].images : [obj[key].images]));
+                                }
+                            }
+                            if (typeof obj[key] === 'object') {
+                                result.push(...findInProps(obj[key], depth + 1));
+                            }
+                        }
+                        return result;
+                    };
+                    const nextImages = findInProps(props);
+                    if (nextImages.length > 0) {
+                        foundImages.push(...nextImages);
+                    }
+                }
                 
                 for (const data of patterns) {
                     if (data && typeof data === 'object') {
@@ -822,7 +864,9 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                                    data.media?.gallery ||
                                    data.product?.images ||
                                    data.product?.gallery ||
-                                   data.detail?.images;
+                                   data.detail?.images ||
+                                   data.photos ||
+                                   data.pictures;
                         
                         // If it's a nested structure, try to find images recursively
                         if (!images) {
@@ -830,7 +874,10 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                                 if (depth > 3 || !obj || typeof obj !== 'object') return [];
                                 const result = [];
                                 for (const key in obj) {
-                                    if (key.toLowerCase().includes('image') || key.toLowerCase().includes('gallery')) {
+                                    if (key.toLowerCase().includes('image') || 
+                                        key.toLowerCase().includes('gallery') ||
+                                        key.toLowerCase().includes('photo') ||
+                                        key.toLowerCase().includes('picture')) {
                                         if (Array.isArray(obj[key])) {
                                             result.push(...obj[key]);
                                         }
@@ -850,7 +897,18 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                                 if (typeof img === 'string') {
                                     url = img;
                                 } else if (img && typeof img === 'object') {
-                                    url = img.url || img.src || img.original || img.medium || img.large || img.high || img.full;
+                                    url = img.url || 
+                                          img.src || 
+                                          img.original || 
+                                          img.medium || 
+                                          img.large || 
+                                          img.high || 
+                                          img.full ||
+                                          img.path ||
+                                          img.imageUrl ||
+                                          img.image ||
+                                          (img.media && img.media.url) ||
+                                          (img.media && img.media.src);
                                 }
                                 if (url && typeof url === 'string') {
                                     foundImages.push(url);
