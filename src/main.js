@@ -63,7 +63,7 @@ Actor.main(async () => {
         async requestHandler({ page, request }) {
             const url = request.url;
             
-            Actor.log.info(`Processing: ${url}`);
+            console.log(`Processing: ${url}`);
 
             try {
                 // Navigate to page
@@ -75,7 +75,7 @@ Actor.main(async () => {
                 // Wait for page to be ready
                 await page.waitForLoadState('networkidle', { timeout: timeoutSecs * 1000 }).catch(() => {
                     // Continue even if networkidle times out
-                    Actor.log.warning(`Network idle timeout for ${url}, continuing...`);
+                    console.warn(`Network idle timeout for ${url}, continuing...`);
                 });
 
                 // Wait a bit more for dynamic content
@@ -103,13 +103,13 @@ Actor.main(async () => {
                 // Push to dataset
                 await Actor.pushData(normalizedData);
                 
-                Actor.log.info(`Successfully extracted data from ${url}`);
-                Actor.log.info(`  Title: ${normalizedData.title || 'N/A'}`);
-                Actor.log.info(`  Price: ${normalizedData.price !== null ? `${normalizedData.currency || ''} ${normalizedData.price}` : 'N/A'}`);
-                Actor.log.info(`  Images: ${normalizedData.images.length}`);
+                console.log(`Successfully extracted data from ${url}`);
+                console.log(`  Title: ${normalizedData.title || 'N/A'}`);
+                console.log(`  Price: ${normalizedData.price !== null ? `${normalizedData.currency || ''} ${normalizedData.price}` : 'N/A'}`);
+                console.log(`  Images: ${normalizedData.images.length}`);
 
             } catch (error) {
-                Actor.log.error(`Error processing ${url}: ${error.message}`);
+                console.error(`Error processing ${url}: ${error.message}`);
                 
                 // Still save error result
                 await Actor.pushData({
@@ -144,13 +144,13 @@ Actor.main(async () => {
         }
     });
 
-    Actor.log.info(`Starting crawl with ${requests.length} URLs`);
-    Actor.log.info(`Max concurrency: ${maxConcurrency}`);
-    Actor.log.info(`Mobile user agent: ${mobileUserAgent}`);
+    console.log(`Starting crawl with ${requests.length} URLs`);
+    console.log(`Max concurrency: ${maxConcurrency}`);
+    console.log(`Mobile user agent: ${mobileUserAgent}`);
 
     // Run crawler
     await crawler.run(requests);
 
-    Actor.log.info('Crawl completed successfully');
+    console.log('Crawl completed successfully');
 });
 
