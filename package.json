@@ -1,5 +1,5 @@
 {
-  "name": "fashion-scraper-pdp",
+  "name": "fashionscraperpdp",
   "version": "1.0.0",
   "description": "Apify Actor for scraping fashion product detail pages (Zara, Mango, etc.)",
   "type": "module",
