@@ -7,7 +7,7 @@
       "title": "Product URLs",
       "type": "array",
       "description": "List of product detail page URLs to scrape",
-      "editor": "urlList",
+      "editor": "select",
       "prefill": [
         {
           "url": "https://www.zara.com/us/en/product/example"
