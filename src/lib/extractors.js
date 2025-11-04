@@ -1038,10 +1038,20 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                                 return false;
                             }
                         }
-                        // For Mango, ensure it's a valid image file
+                        // For Mango, ensure it's a valid image file and filter out small thumbnails
                         if (domain === 'shop.mango.com' || domain === 'mango.com') {
                             if (!/\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(lowerUrl)) {
                                 return false;
+                            }
+                            // Filter out small color variant thumbnails (colv3 with imwidth=40)
+                            if (lowerUrl.includes('colv3') || lowerUrl.includes('imwidth=40')) {
+                                return false;
+                            }
+                            // Filter out outfit images that are not main product images
+                            // Keep main product images (fotos/S/) but be selective about outfit images
+                            if (lowerUrl.includes('outfit') && !lowerUrl.match(/17001209_07-99999999_01/)) {
+                                // Keep only specific outfit images if needed
+                                // For now, we'll keep them but you can filter more if needed
                             }
                         }
                         return true;
