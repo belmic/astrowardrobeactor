@@ -26,15 +26,18 @@ const DOMAIN_SELECTORS = {
             'img.product-detail-images__image', 
             '.product-detail-images img', 
             '.product-detail-images picture img',
+            '.product-detail-images picture source',
             '[data-testid="product-image"] img',
             '[data-testid="product-image"]',
             '.product-image img',
             '.media-image img',
             'picture img',
+            'picture source',
             '.product-gallery img',
             '.gallery img',
+            '.product-detail-images source',
             'img[src*="static.zara.net"]',
-            'img[src*="product"]'
+            'img[data-src*="static.zara.net"]'
         ]
     },
     'shop.mango.com': {
@@ -661,16 +664,26 @@ export async function extractFromSelectors(page, domain, baseUrl) {
         try {
             const imageUrls = await page.$$eval(selector, (imgs) => {
                 return imgs.map(img => {
-                    // Try multiple sources: src, data-src, data-lazy-src, data-original, srcset
-                    let src = img.src || 
+                    // Handle both IMG and SOURCE elements
+                    let src = null;
+                    
+                    if (img.tagName === 'IMG') {
+                        // Try multiple sources: src, data-src, data-lazy-src, data-original, srcset
+                        src = img.src || 
                              img.getAttribute('data-src') || 
                              img.getAttribute('data-lazy-src') ||
                              img.getAttribute('data-original') ||
                              img.getAttribute('data-srcset') ||
                              (img.srcset ? img.srcset.split(',')[0].trim().split(' ')[0] : null);
+                    } else if (img.tagName === 'SOURCE') {
+                        // For source elements in picture tags
+                        src = img.getAttribute('srcset') || 
+                             img.getAttribute('data-srcset') ||
+                             img.getAttribute('src');
+                    }
                     
-                    // If no src found, try to get from parent element (for picture tags)
-                    if (!src && img.parentElement) {
+                    // If no src found and it's an IMG, try to get from parent element (for picture tags)
+                    if (!src && img.tagName === 'IMG' && img.parentElement) {
                         const parent = img.parentElement;
                         if (parent.tagName === 'PICTURE') {
                             const source = parent.querySelector('source');
@@ -682,13 +695,41 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                         }
                     }
                     
+                    // Extract URL from srcset if it's a srcset string
+                    if (src && src.includes(',')) {
+                        src = src.split(',')[0].trim().split(' ')[0];
+                    }
+                    
                     return src;
                 }).filter(Boolean);
             });
             if (imageUrls && imageUrls.length > 0) {
                 result.images = imageUrls
                     .map(url => resolveUrl(url, baseUrl))
-                    .filter(Boolean);
+                    .filter(Boolean)
+                    .filter(url => {
+                        // Filter out unwanted images
+                        const lowerUrl = url.toLowerCase();
+                        // Exclude SVG files
+                        if (lowerUrl.endsWith('.svg')) return false;
+                        // Exclude transparent/placeholder images
+                        if (lowerUrl.includes('transparent-background') || 
+                            lowerUrl.includes('transparent.png') ||
+                            lowerUrl.includes('placeholder')) return false;
+                        // Exclude icons
+                        if (lowerUrl.includes('/icon') || 
+                            lowerUrl.includes('iconos') ||
+                            lowerUrl.includes('icon-')) return false;
+                        // For Zara, only include product images (pattern: /product-id-variant/)
+                        if (domain === 'zara.com') {
+                            // Zara product images pattern: /05919821613-p/ or /05919821613-a1/ etc.
+                            // Should contain digits followed by -p, -a, -e, -b, etc.
+                            if (!/\d+[-](p|a|e|b|d|f|g|h|i|j|k|l|m|n|o|q|r|s|t|u|v|w|x|y|z)\d*/.test(lowerUrl)) {
+                                return false;
+                            }
+                        }
+                        return true;
+                    });
                 // Remove duplicates
                 result.images = [...new Set(result.images)];
                 if (result.images.length > 0) break;
@@ -769,7 +810,28 @@ export async function extractFromSelectors(page, domain, baseUrl) {
             if (imageData && Array.isArray(imageData) && imageData.length > 0) {
                 const resolvedImages = imageData
                     .map(url => resolveUrl(url, baseUrl))
-                    .filter(Boolean);
+                    .filter(Boolean)
+                    .filter(url => {
+                        // Filter out unwanted images
+                        const lowerUrl = url.toLowerCase();
+                        // Exclude SVG files
+                        if (lowerUrl.endsWith('.svg')) return false;
+                        // Exclude transparent/placeholder images
+                        if (lowerUrl.includes('transparent-background') || 
+                            lowerUrl.includes('transparent.png') ||
+                            lowerUrl.includes('placeholder')) return false;
+                        // Exclude icons
+                        if (lowerUrl.includes('/icon') || 
+                            lowerUrl.includes('iconos') ||
+                            lowerUrl.includes('icon-')) return false;
+                        // For Zara, only include product images
+                        if (domain === 'zara.com') {
+                            if (!/\d+[-](p|a|e|b|d|f|g|h|i|j|k|l|m|n|o|q|r|s|t|u|v|w|x|y|z)\d*/.test(lowerUrl)) {
+                                return false;
+                            }
+                        }
+                        return true;
+                    });
                 result.images = [...new Set([...result.images, ...resolvedImages])];
             }
         } catch (e) {
@@ -806,7 +868,26 @@ export async function extractFromSelectors(page, domain, baseUrl) {
             if (lazyImages && lazyImages.length > 0) {
                 const resolvedLazyImages = lazyImages
                     .map(url => resolveUrl(url, baseUrl))
-                    .filter(Boolean);
+                    .filter(Boolean)
+                    .filter(url => {
+                        // Filter out unwanted images
+                        const lowerUrl = url.toLowerCase();
+                        // Exclude SVG files
+                        if (lowerUrl.endsWith('.svg')) return false;
+                        // Exclude transparent/placeholder images
+                        if (lowerUrl.includes('transparent-background') || 
+                            lowerUrl.includes('transparent.png') ||
+                            lowerUrl.includes('placeholder')) return false;
+                        // Exclude icons
+                        if (lowerUrl.includes('/icon') || 
+                            lowerUrl.includes('iconos') ||
+                            lowerUrl.includes('icon-')) return false;
+                        // For Zara, only include product images (pattern: /product-id-variant/)
+                        if (!/\d+[-](p|a|e|b|d|f|g|h|i|j|k|l|m|n|o|q|r|s|t|u|v|w|x|y|z)\d*/.test(lowerUrl)) {
+                            return false;
+                        }
+                        return true;
+                    });
                 result.images = [...new Set([...result.images, ...resolvedLazyImages])];
             }
         } catch (e) {
