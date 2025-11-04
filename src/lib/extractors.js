@@ -49,7 +49,19 @@ const DOMAIN_SELECTORS = {
             '[data-testid="product-description"]',
             '.product-detail-description',
             '.product-details-description',
-            '.product-info p'
+            '.product-info p',
+            '.product-description-text',
+            '.product-long-description',
+            '.product-detail-info p',
+            '.product-info-description-text',
+            '[itemprop="description"]',
+            'meta[property="og:description"]',
+            'meta[name="description"]',
+            '.product-specs',
+            '.product-details',
+            '.product-info-text',
+            '.product-summary',
+            '.product-text'
         ],
         price: [
             '.product-price', 
@@ -145,6 +157,7 @@ export async function extractJsonLd(page) {
 
 /**
  * Extract embedded JSON from page (window.INITIAL_STATE, data-state, etc.)
+ * Also extracts description from meta tags and other sources
  * @param {Page} page - Playwright page object
  * @returns {Object|null} Parsed embedded JSON or null
  */
@@ -309,6 +322,10 @@ export function extractFromEmbeddedJson(embeddedJson, baseUrl) {
         product = embeddedJson.productData;
     } else if (embeddedJson.products && Array.isArray(embeddedJson.products)) {
         product = embeddedJson.products[0];
+    } else if (embeddedJson.props?.pageProps?.initialState?.product) {
+        product = embeddedJson.props.pageProps.initialState.product;
+    } else if (embeddedJson.props?.pageProps?.data?.product) {
+        product = embeddedJson.props.pageProps.data.product;
     }
 
     if (!product) {
@@ -320,9 +337,15 @@ export function extractFromEmbeddedJson(embeddedJson, baseUrl) {
         result.title = normalizeEmpty(product.name || product.title || product.productName);
     }
 
-    // Description
+    // Description - try multiple paths
     if (product.description || product.detail || product.longDescription) {
         result.description = normalizeEmpty(product.description || product.detail || product.longDescription);
+    } else if (product.text || product.descriptionText || product.productDescription) {
+        result.description = normalizeEmpty(product.text || product.descriptionText || product.productDescription);
+    } else if (product.info?.description) {
+        result.description = normalizeEmpty(product.info.description);
+    } else if (product.details?.description) {
+        result.description = normalizeEmpty(product.details.description);
     }
 
     // Price - try multiple paths
@@ -820,7 +843,8 @@ export async function extractFromSelectors(page, domain, baseUrl) {
     if (result.images.length < 10 || domain === 'shop.mango.com' || domain === 'mango.com') {
         try {
             // Try to extract from window.__INITIAL_STATE__ or similar
-            const imageData = await page.evaluate(() => {
+            // For Mango, also extract description
+            const extractedData = await page.evaluate(() => {
                 const patterns = [
                     window.__INITIAL_STATE__,
                     window.__PRELOADED_STATE__,
@@ -859,6 +883,30 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                     const nextImages = findInProps(props);
                     if (nextImages.length > 0) {
                         foundImages.push(...nextImages);
+                    }
+                }
+                
+                // Also try to extract description from __NEXT_DATA__ for Mango
+                const foundDescription = [];
+                if (window.__NEXT_DATA__ && window.__NEXT_DATA__.props) {
+                    const findDescription = (obj, depth = 0) => {
+                        if (depth > 5 || !obj || typeof obj !== 'object') return null;
+                        for (const key in obj) {
+                            if ((key === 'description' || key === 'detail' || key === 'longDescription' || 
+                                 key === 'text' || key === 'descriptionText') && 
+                                typeof obj[key] === 'string' && obj[key].trim().length > 10) {
+                                return obj[key];
+                            }
+                            if (typeof obj[key] === 'object') {
+                                const desc = findDescription(obj[key], depth + 1);
+                                if (desc) return desc;
+                            }
+                        }
+                        return null;
+                    };
+                    const desc = findDescription(window.__NEXT_DATA__.props);
+                    if (desc) {
+                        foundDescription.push(desc);
                     }
                 }
                 
@@ -926,9 +974,19 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                     }
                 }
                 
-                return foundImages.length > 0 ? [...new Set(foundImages)] : null;
+                return {
+                    images: foundImages.length > 0 ? [...new Set(foundImages)] : null,
+                    description: foundDescription.length > 0 ? foundDescription[0] : null
+                };
             });
             
+            // Extract description for Mango if found
+            if ((domain === 'shop.mango.com' || domain === 'mango.com') && 
+                extractedData && extractedData.description && !result.description) {
+                result.description = normalizeEmpty(extractedData.description);
+            }
+            
+            const imageData = extractedData?.images;
             if (imageData && Array.isArray(imageData) && imageData.length > 0) {
                 const resolvedImages = imageData
                     .map(url => resolveUrl(url, baseUrl))
@@ -1108,7 +1166,8 @@ export async function extractProductData(page, url) {
     }
 
     // If we got basic data, try to enhance with embedded JSON
-    if (!result.title || !result.price) {
+    // For Mango, always try to get description from JSON
+    if (!result.title || !result.price || (domain === 'shop.mango.com' || domain === 'mango.com') && !result.description) {
         const embeddedJson = await extractEmbeddedJson(page);
         if (embeddedJson) {
             const embeddedData = extractFromEmbeddedJson(embeddedJson, url);
@@ -1124,6 +1183,23 @@ export async function extractProductData(page, url) {
             if (!result.raw.detectedApi) {
                 result.raw.detectedApi = 'embedded-json';
             }
+        }
+    }
+    
+    // For Mango, try to extract description from meta tags if still missing
+    if ((domain === 'shop.mango.com' || domain === 'mango.com') && !result.description) {
+        try {
+            const metaDescription = await page.$eval('meta[property="og:description"]', el => el.getAttribute('content')).catch(() => null);
+            if (metaDescription) {
+                result.description = normalizeEmpty(metaDescription);
+            } else {
+                const metaDesc = await page.$eval('meta[name="description"]', el => el.getAttribute('content')).catch(() => null);
+                if (metaDesc) {
+                    result.description = normalizeEmpty(metaDesc);
+                }
+            }
+        } catch (e) {
+            // Ignore
         }
     }
 
