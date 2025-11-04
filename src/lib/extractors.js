@@ -722,9 +722,14 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                             lowerUrl.includes('icon-')) return false;
                         // For Zara, only include product images (pattern: /product-id-variant/)
                         if (domain === 'zara.com') {
-                            // Zara product images pattern: /05919821613-p/ or /05919821613-a1/ etc.
-                            // Should contain digits followed by -p, -a, -e, -b, etc.
+                            // Zara product images pattern: /05919821613-p/ or /05919821613-a1/ or /05919821613-e1/ etc.
+                            // Should contain digits followed by -p, -a, -e, -b, etc. (with optional numbers after letter)
+                            // Pattern: digits-dash-letter-digits (e.g., 05919821613-e1, 05919821613-p)
                             if (!/\d+[-](p|a|e|b|d|f|g|h|i|j|k|l|m|n|o|q|r|s|t|u|v|w|x|y|z)\d*/.test(lowerUrl)) {
+                                return false;
+                            }
+                            // Additional check: must be a .jpg/.jpeg/.png/.webp file (not SVG, icons, etc.)
+                            if (!/\.(jpg|jpeg|png|webp)(\?|$)/i.test(lowerUrl)) {
                                 return false;
                             }
                         }
@@ -732,7 +737,9 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                     });
                 // Remove duplicates
                 result.images = [...new Set(result.images)];
-                if (result.images.length > 0) break;
+                // Don't break immediately - continue to collect all images from all selectors
+                // Only break if we have enough images (for performance)
+                if (result.images.length >= 10) break;
             }
         } catch (e) {
             // Continue to next selector
@@ -856,7 +863,13 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                 const images = [];
                 elements.forEach(el => {
                     if (el.tagName === 'IMG') {
-                        const src = el.src || el.getAttribute('data-src') || el.getAttribute('data-lazy-src');
+                        // Try multiple sources to catch lazy-loaded images
+                        const src = el.src || 
+                                   el.getAttribute('data-src') || 
+                                   el.getAttribute('data-lazy-src') ||
+                                   el.getAttribute('data-original') ||
+                                   el.getAttribute('data-srcset') ||
+                                   (el.srcset ? el.srcset.split(',')[0].trim().split(' ')[0] : null);
                         if (src && src.includes('static.zara.net')) {
                             images.push(src);
                         }
@@ -884,6 +897,10 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                             lowerUrl.includes('icon-')) return false;
                         // For Zara, only include product images (pattern: /product-id-variant/)
                         if (!/\d+[-](p|a|e|b|d|f|g|h|i|j|k|l|m|n|o|q|r|s|t|u|v|w|x|y|z)\d*/.test(lowerUrl)) {
+                            return false;
+                        }
+                        // Additional check: must be a .jpg/.jpeg/.png/.webp file
+                        if (!/\.(jpg|jpeg|png|webp)(\?|$)/i.test(lowerUrl)) {
                             return false;
                         }
                         return true;
