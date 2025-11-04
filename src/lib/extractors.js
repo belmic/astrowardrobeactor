@@ -840,6 +840,10 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                             if (!/\d+[-](p|a|e|b|d|f|g|h|i|j|k|l|m|n|o|q|r|s|t|u|v|w|x|y|z)\d*/.test(lowerUrl)) {
                                 return false;
                             }
+                            // Additional check: must be a .jpg/.jpeg/.png/.webp file
+                            if (!/\.(jpg|jpeg|png|webp)(\?|$)/i.test(lowerUrl)) {
+                                return false;
+                            }
                         }
                         return true;
                     });
@@ -877,6 +881,7 @@ export async function extractFromSelectors(page, domain, baseUrl) {
             await page.waitForTimeout(1000);
             
             // Extract all images again after scroll (only IMG tags, no background images)
+            // For Zara, only check static.zara.net images
             const lazyImages = await page.$$eval('img', (elements) => {
                 const images = [];
                 elements.forEach(el => {
@@ -889,6 +894,7 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                                    el.getAttribute('data-srcset') ||
                                    el.getAttribute('data-lazy') ||
                                    (el.srcset ? el.srcset.split(',')[0].trim().split(' ')[0] : null);
+                        // Only include Zara CDN images (since we're in Zara-specific block)
                         if (src && src.includes('static.zara.net')) {
                             images.push(src);
                         }
@@ -915,12 +921,14 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                             lowerUrl.includes('iconos') ||
                             lowerUrl.includes('icon-')) return false;
                         // For Zara, only include product images (pattern: /product-id-variant/)
-                        if (!/\d+[-](p|a|e|b|d|f|g|h|i|j|k|l|m|n|o|q|r|s|t|u|v|w|x|y|z)\d*/.test(lowerUrl)) {
-                            return false;
-                        }
-                        // Additional check: must be a .jpg/.jpeg/.png/.webp file
-                        if (!/\.(jpg|jpeg|png|webp)(\?|$)/i.test(lowerUrl)) {
-                            return false;
+                        if (domain === 'zara.com') {
+                            if (!/\d+[-](p|a|e|b|d|f|g|h|i|j|k|l|m|n|o|q|r|s|t|u|v|w|x|y|z)\d*/.test(lowerUrl)) {
+                                return false;
+                            }
+                            // Additional check: must be a .jpg/.jpeg/.png/.webp file
+                            if (!/\.(jpg|jpeg|png|webp)(\?|$)/i.test(lowerUrl)) {
+                                return false;
+                            }
                         }
                         return true;
                     });
