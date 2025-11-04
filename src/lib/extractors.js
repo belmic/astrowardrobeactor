@@ -445,6 +445,94 @@ export async function extractFromSelectors(page, domain, baseUrl) {
         }
     }
 
+    // Fallback: extract currency from URL locale (e.g., /us/en -> USD, /uk/en -> GBP, /cy/en -> EUR)
+    if (!result.currency) {
+        try {
+            const url = new URL(baseUrl);
+            const pathParts = url.pathname.split('/').filter(Boolean);
+            
+            // Map common country codes to currencies
+            const countryCurrencyMap = {
+                'us': 'USD',
+                'uk': 'GBP',
+                'gb': 'GBP',
+                'cy': 'EUR', // Cyprus uses EUR
+                'de': 'EUR',
+                'fr': 'EUR',
+                'es': 'EUR',
+                'it': 'EUR',
+                'nl': 'EUR',
+                'be': 'EUR',
+                'at': 'EUR',
+                'pt': 'EUR',
+                'ie': 'EUR',
+                'fi': 'EUR',
+                'pl': 'PLN',
+                'cz': 'CZK',
+                'se': 'SEK',
+                'dk': 'DKK',
+                'no': 'NOK',
+                'ch': 'CHF',
+                'jp': 'JPY',
+                'cn': 'CNY',
+                'au': 'AUD',
+                'ca': 'CAD',
+                'mx': 'MXN',
+                'br': 'BRL',
+                'ru': 'RUB',
+                'ua': 'UAH',
+                'kz': 'KZT',
+                'tr': 'TRY',
+                'ae': 'AED',
+                'sa': 'SAR'
+            };
+            
+            if (pathParts.length > 0) {
+                const countryCode = pathParts[0].toLowerCase();
+                if (countryCurrencyMap[countryCode]) {
+                    result.currency = countryCurrencyMap[countryCode];
+                }
+            }
+        } catch (e) {
+            // Ignore
+        }
+    }
+
+    // Fallback: try to extract currency from embedded JSON
+    if (!result.currency) {
+        try {
+            const currencyFromJson = await page.evaluate(() => {
+                const patterns = [
+                    window.__INITIAL_STATE__,
+                    window.__PRELOADED_STATE__,
+                    window.productData,
+                    window.product,
+                    window.priceData
+                ];
+                
+                for (const data of patterns) {
+                    if (data && typeof data === 'object') {
+                        const currency = data.currency || 
+                                       data.priceCurrency || 
+                                       data.currencyCode ||
+                                       data.price?.currency ||
+                                       data.product?.currency;
+                        if (currency) {
+                            return currency;
+                        }
+                    }
+                }
+                return null;
+            });
+            
+            if (currencyFromJson) {
+                result.currency = normalizeCurrency(currencyFromJson);
+            }
+        } catch (e) {
+            // Ignore
+        }
+    }
+
     // Extract SKU
     for (const selector of selectors.sku) {
         try {
@@ -452,6 +540,10 @@ export async function extractFromSelectors(page, domain, baseUrl) {
             if (element) {
                 const sku = await element.getAttribute('data-sku') ||
                            await element.getAttribute('data-product-id') ||
+                           await element.getAttribute('data-product-reference') ||
+                           await element.getAttribute('data-reference') ||
+                           await element.getAttribute('id') ||
+                           await element.getAttribute('data-id') ||
                            await element.textContent();
                 if (sku && sku.trim()) {
                     result.sku = normalizeEmpty(sku.trim());
@@ -460,6 +552,101 @@ export async function extractFromSelectors(page, domain, baseUrl) {
             }
         } catch (e) {
             // Continue to next selector
+        }
+    }
+
+    // Fallback: try to extract SKU from URL (product ID in URL)
+    if (!result.sku) {
+        try {
+            const url = new URL(baseUrl);
+            const pathParts = url.pathname.split('/').filter(Boolean);
+            
+            // Try to find product ID in URL (common patterns: -p08975071, /08975071, etc.)
+            for (const part of pathParts) {
+                // Match patterns like -p08975071, p08975071
+                const match = part.match(/-?p?(\d+)/i);
+                if (match && match[1]) {
+                    result.sku = match[1];
+                    break;
+                }
+                // Match pure numeric IDs
+                if (/^\d{6,}$/.test(part)) {
+                    result.sku = part;
+                    break;
+                }
+            }
+        } catch (e) {
+            // Ignore
+        }
+    }
+
+    // Fallback: try to extract SKU from meta tags
+    if (!result.sku) {
+        try {
+            const metaSku = await page.$eval('meta[property="product:sku"]', el => el.content).catch(() => null) ||
+                           await page.$eval('meta[name="product:sku"]', el => el.content).catch(() => null) ||
+                           await page.$eval('meta[property="product:id"]', el => el.content).catch(() => null);
+            if (metaSku) {
+                result.sku = normalizeEmpty(metaSku.trim());
+            }
+        } catch (e) {
+            // Ignore
+        }
+    }
+
+    // Fallback: try to extract SKU from embedded JSON
+    if (!result.sku) {
+        try {
+            const skuFromJson = await page.evaluate(() => {
+                const patterns = [
+                    window.__INITIAL_STATE__,
+                    window.__PRELOADED_STATE__,
+                    window.productData,
+                    window.product,
+                    window.productInfo
+                ];
+                
+                for (const data of patterns) {
+                    if (data && typeof data === 'object') {
+                        const sku = data.sku || 
+                                  data.productId || 
+                                  data.id ||
+                                  data.product?.sku ||
+                                  data.product?.id ||
+                                  data.productId ||
+                                  data.reference ||
+                                  data.productReference;
+                        if (sku) {
+                            return String(sku);
+                        }
+                    }
+                }
+                return null;
+            });
+            
+            if (skuFromJson) {
+                result.sku = normalizeEmpty(skuFromJson.trim());
+            }
+        } catch (e) {
+            // Ignore
+        }
+    }
+
+    // Fallback: try to extract SKU from page data attributes
+    if (!result.sku) {
+        try {
+            const pageData = await page.$('[data-product-id], [data-sku], [data-product-reference], [data-product-code]');
+            if (pageData) {
+                const sku = await pageData.getAttribute('data-product-id') ||
+                          await pageData.getAttribute('data-sku') ||
+                          await pageData.getAttribute('data-product-reference') ||
+                          await pageData.getAttribute('data-product-code');
+                if (sku) {
+                    result.sku = normalizeEmpty(sku.trim());
+                }
+            }
+        } catch (e) {
+            // Ignore
         }
     }
 

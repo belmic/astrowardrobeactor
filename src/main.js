@@ -92,30 +92,30 @@ Actor.main(async () => {
             console.log(`Processing: ${url}`);
 
             try {
-                // Navigate to page with longer timeout for slow sites
-                const navigationTimeout = Math.max(timeoutSecs * 1000, 120000); // At least 120 seconds
+                // Navigate to page with optimized timeout
+                const navigationTimeout = Math.max(timeoutSecs * 1000, 60000); // Max 60 seconds instead of 120
                 
                 await page.goto(url, {
-                    waitUntil: 'domcontentloaded', // Use domcontentloaded instead of networkidle for faster loading
+                    waitUntil: 'domcontentloaded', // Use domcontentloaded for faster loading
                     timeout: navigationTimeout
                 }).catch(async (error) => {
                     console.warn(`Navigation timeout/error, trying with load state: ${error.message}`);
                     // Try to wait for at least some content
-                    await page.waitForLoadState('domcontentloaded', { timeout: 30000 }).catch(() => {});
+                    await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
                 });
 
-                // Wait for page to be ready (try multiple strategies)
-                await page.waitForLoadState('domcontentloaded', { timeout: 30000 }).catch(() => {
+                // Wait for page to be ready (optimized timeouts)
+                await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {
                     console.warn(`DOM content loaded timeout for ${url}, continuing...`);
                 });
 
-                // Wait for network to be idle (but don't fail if it times out)
-                await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {
+                // Wait for network to be idle (aggressive timeout - only 10 seconds)
+                await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
                     console.warn(`Network idle timeout for ${url}, continuing...`);
                 });
 
-                // Wait a bit more for dynamic content (especially for Zara which loads content via JS)
-                await page.waitForTimeout(5000);
+                // Wait for dynamic content (reduced from 5s to 2s)
+                await page.waitForTimeout(2000);
 
                 // Check if we're on location selection page (Zara, etc.)
                 const pageTitle = await page.title().catch(() => '');
@@ -159,8 +159,8 @@ Actor.main(async () => {
                                     const element = await page.$(selector);
                                     if (element) {
                                         await element.click();
-                                        await page.waitForTimeout(2000);
-                                        await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+                                        await page.waitForTimeout(1000);
+                                        await page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
                                         return true;
                                     }
                                 } catch (e) {
@@ -180,9 +180,9 @@ Actor.main(async () => {
                                     urlObj.pathname = urlObj.pathname.replace(/^\/\w+\/\w+/, '/us/en');
                                     await page.goto(urlObj.toString(), { 
                                         waitUntil: 'domcontentloaded', 
-                                        timeout: 60000 
+                                        timeout: 30000 
                                     });
-                                    await page.waitForTimeout(3000);
+                                    await page.waitForTimeout(1500);
                                     return true;
                                 }
                             } catch (e) {
@@ -219,8 +219,8 @@ Actor.main(async () => {
                             locationSelected = await strategy();
                             if (locationSelected) {
                                 console.log('Location selected successfully');
-                                // Wait a bit more for page to load
-                                await page.waitForTimeout(3000);
+                                // Wait a bit more for page to load (reduced from 3s to 1.5s)
+                                await page.waitForTimeout(1500);
                                 break;
                             }
                         } catch (e) {
