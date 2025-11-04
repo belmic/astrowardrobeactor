@@ -43,28 +43,21 @@ Actor.main(async () => {
             launchOptions: {
                 headless: true,
                 args: ['--no-sandbox', '--disable-setuid-sandbox']
+            },
+            launcher: async (launchOptions) => {
+                const { chromium } = await import('playwright');
+                return chromium.launch(launchOptions);
+            },
+            contextOptions: {
+                userAgent: userAgent,
+                viewport: {
+                    width: mobileUserAgent ? 390 : 1920,
+                    height: mobileUserAgent ? 844 : 1080
+                }
             }
         },
         preNavigationHooks: [
-            async ({ page, request, context }) => {
-                // Set user agent through context extra HTTP headers
-                await context.setExtraHTTPHeaders({
-                    'User-Agent': userAgent
-                }).catch(() => {
-                    // Fallback if context.setExtraHTTPHeaders fails
-                });
-                
-                // Set viewport
-                try {
-                    await page.setViewportSize({
-                        width: mobileUserAgent ? 390 : 1920,
-                        height: mobileUserAgent ? 844 : 1080
-                    });
-                } catch (e) {
-                    // Viewport might already be set or not available
-                    console.warn('Could not set viewport:', e.message);
-                }
-
+            async ({ page, request }) => {
                 // Random delay for throttling
                 await randomDelay(300, 900);
             }
