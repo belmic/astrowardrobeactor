@@ -34,8 +34,7 @@ const DOMAIN_SELECTORS = {
             '.product-gallery img',
             '.gallery img',
             'img[src*="static.zara.net"]',
-            'img[src*="product"]',
-            '[style*="background-image"]'
+            'img[src*="product"]'
         ]
     },
     'shop.mango.com': {
@@ -683,25 +682,6 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                         }
                     }
                     
-                    // Try to get from background-image style
-                    if (!src && img.style && img.style.backgroundImage) {
-                        const bgMatch = img.style.backgroundImage.match(/url\(['"]?([^'"]+)['"]?\)/);
-                        if (bgMatch && bgMatch[1]) {
-                            src = bgMatch[1];
-                        }
-                    }
-                    
-                    // Try to get from computed style background-image
-                    if (!src) {
-                        const computedStyle = window.getComputedStyle(img);
-                        if (computedStyle.backgroundImage && computedStyle.backgroundImage !== 'none') {
-                            const bgMatch = computedStyle.backgroundImage.match(/url\(['"]?([^'"]+)['"]?\)/);
-                            if (bgMatch && bgMatch[1]) {
-                                src = bgMatch[1];
-                            }
-                        }
-                    }
-                    
                     return src;
                 }).filter(Boolean);
             });
@@ -718,42 +698,6 @@ export async function extractFromSelectors(page, domain, baseUrl) {
         }
     }
 
-    // Special handling for Zara: extract from background-image styles
-    if (domain === 'zara.com' && result.images.length < 3) {
-        try {
-            const bgImages = await page.evaluate(() => {
-                const images = [];
-                // Find all elements with background-image
-                const elements = document.querySelectorAll('[style*="background-image"], [class*="product-detail"], [class*="image"]');
-                elements.forEach(el => {
-                    const style = window.getComputedStyle(el);
-                    if (style.backgroundImage && style.backgroundImage !== 'none') {
-                        const match = style.backgroundImage.match(/url\(['"]?([^'"]+)['"]?\)/);
-                        if (match && match[1] && match[1].includes('static.zara.net')) {
-                            images.push(match[1]);
-                        }
-                    }
-                    // Also check inline style
-                    if (el.style && el.style.backgroundImage) {
-                        const match = el.style.backgroundImage.match(/url\(['"]?([^'"]+)['"]?\)/);
-                        if (match && match[1] && match[1].includes('static.zara.net')) {
-                            images.push(match[1]);
-                        }
-                    }
-                });
-                return [...new Set(images)];
-            });
-            
-            if (bgImages && bgImages.length > 0) {
-                const resolvedBgImages = bgImages
-                    .map(url => resolveUrl(url, baseUrl))
-                    .filter(Boolean);
-                result.images = [...new Set([...result.images, ...resolvedBgImages])];
-            }
-        } catch (e) {
-            // Ignore
-        }
-    }
 
     // Fallback: try to extract images from JSON data in page
     if (result.images.length < 3) {
@@ -845,23 +789,14 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                 return new Promise(resolve => setTimeout(resolve, 500));
             });
             
-            // Extract all images again after scroll
-            const lazyImages = await page.$$eval('img, [style*="background-image"]', (elements) => {
+            // Extract all images again after scroll (only IMG tags, no background images)
+            const lazyImages = await page.$$eval('img', (elements) => {
                 const images = [];
                 elements.forEach(el => {
                     if (el.tagName === 'IMG') {
                         const src = el.src || el.getAttribute('data-src') || el.getAttribute('data-lazy-src');
                         if (src && src.includes('static.zara.net')) {
                             images.push(src);
-                        }
-                    } else {
-                        // Check background-image
-                        const style = window.getComputedStyle(el);
-                        if (style.backgroundImage && style.backgroundImage !== 'none') {
-                            const match = style.backgroundImage.match(/url\(['"]?([^'"]+)['"]?\)/);
-                            if (match && match[1] && match[1].includes('static.zara.net')) {
-                                images.push(match[1]);
-                            }
                         }
                     }
                 });
