@@ -32,6 +32,8 @@ Actor.main(async () => {
     });
 
     // Create crawler
+    const userAgent = mobileUserAgent ? getMobileUserAgent() : getDesktopUserAgent();
+    
     const crawler = new PlaywrightCrawler({
         proxyConfiguration,
         maxConcurrency,
@@ -44,16 +46,24 @@ Actor.main(async () => {
             }
         },
         preNavigationHooks: [
-            async ({ page, request }) => {
-                // Set user agent
-                const userAgent = mobileUserAgent ? getMobileUserAgent() : getDesktopUserAgent();
-                await page.setUserAgent(userAgent);
+            async ({ page, request, context }) => {
+                // Set user agent through context extra HTTP headers
+                await context.setExtraHTTPHeaders({
+                    'User-Agent': userAgent
+                }).catch(() => {
+                    // Fallback if context.setExtraHTTPHeaders fails
+                });
                 
                 // Set viewport
-                await page.setViewportSize({
-                    width: mobileUserAgent ? 390 : 1920,
-                    height: mobileUserAgent ? 844 : 1080
-                });
+                try {
+                    await page.setViewportSize({
+                        width: mobileUserAgent ? 390 : 1920,
+                        height: mobileUserAgent ? 844 : 1080
+                    });
+                } catch (e) {
+                    // Viewport might already be set or not available
+                    console.warn('Could not set viewport:', e.message);
+                }
 
                 // Random delay for throttling
                 await randomDelay(300, 900);
