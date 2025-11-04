@@ -1,6 +1,6 @@
 {
   "actorSpecification": 1,
-  "name": "fashionscraperpdp",
+  "name": "fashionpdp",
   "title": "Fashion Product Detail Page Scraper",
   "description": "Scrapes product detail pages from fashion retailers (Zara, Mango, etc.) extracting title, description, price, currency, SKU, and images using Playwright with smart JSON-LD detection.",
   "version": "1.0.0",
