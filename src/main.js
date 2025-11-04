@@ -116,6 +116,12 @@ Actor.main(async () => {
 
                 // Wait for dynamic content (reduced from 5s to 2s)
                 await page.waitForTimeout(2000);
+                
+                // For Zara, wait a bit more for images to load
+                const urlObj = new URL(url);
+                if (urlObj.hostname.includes('zara.com')) {
+                    await page.waitForTimeout(1000); // Additional wait for Zara images
+                }
 
                 // Check if we're on location selection page (Zara, etc.)
                 const pageTitle = await page.title().catch(() => '');

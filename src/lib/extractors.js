@@ -22,13 +22,20 @@ const DOMAIN_SELECTORS = {
         currency: ['.product-detail-info__price', '[data-testid="price"]', '.price', '.money-amount__main', '[data-currency]'],
         sku: ['[data-product-id]', '[data-sku]', '.product-reference', '[data-product-reference]'],
         images: [
+            '.product-detail-images__image',
             'img.product-detail-images__image', 
             '.product-detail-images img', 
-            '[data-testid="product-image"] img', 
+            '.product-detail-images picture img',
+            '[data-testid="product-image"] img',
+            '[data-testid="product-image"]',
             '.product-image img',
-            'img[src*="product"]',
             '.media-image img',
-            'picture img'
+            'picture img',
+            '.product-gallery img',
+            '.gallery img',
+            'img[src*="static.zara.net"]',
+            'img[src*="product"]',
+            '[style*="background-image"]'
         ]
     },
     'shop.mango.com': {
@@ -656,12 +663,45 @@ export async function extractFromSelectors(page, domain, baseUrl) {
             const imageUrls = await page.$$eval(selector, (imgs) => {
                 return imgs.map(img => {
                     // Try multiple sources: src, data-src, data-lazy-src, data-original, srcset
-                    const src = img.src || 
-                                img.getAttribute('data-src') || 
-                                img.getAttribute('data-lazy-src') ||
-                                img.getAttribute('data-original') ||
-                                img.getAttribute('data-srcset') ||
-                                (img.srcset ? img.srcset.split(',')[0].trim().split(' ')[0] : null);
+                    let src = img.src || 
+                             img.getAttribute('data-src') || 
+                             img.getAttribute('data-lazy-src') ||
+                             img.getAttribute('data-original') ||
+                             img.getAttribute('data-srcset') ||
+                             (img.srcset ? img.srcset.split(',')[0].trim().split(' ')[0] : null);
+                    
+                    // If no src found, try to get from parent element (for picture tags)
+                    if (!src && img.parentElement) {
+                        const parent = img.parentElement;
+                        if (parent.tagName === 'PICTURE') {
+                            const source = parent.querySelector('source');
+                            if (source) {
+                                src = source.getAttribute('srcset') || 
+                                      source.getAttribute('data-srcset') ||
+                                      source.getAttribute('src');
+                            }
+                        }
+                    }
+                    
+                    // Try to get from background-image style
+                    if (!src && img.style && img.style.backgroundImage) {
+                        const bgMatch = img.style.backgroundImage.match(/url\(['"]?([^'"]+)['"]?\)/);
+                        if (bgMatch && bgMatch[1]) {
+                            src = bgMatch[1];
+                        }
+                    }
+                    
+                    // Try to get from computed style background-image
+                    if (!src) {
+                        const computedStyle = window.getComputedStyle(img);
+                        if (computedStyle.backgroundImage && computedStyle.backgroundImage !== 'none') {
+                            const bgMatch = computedStyle.backgroundImage.match(/url\(['"]?([^'"]+)['"]?\)/);
+                            if (bgMatch && bgMatch[1]) {
+                                src = bgMatch[1];
+                            }
+                        }
+                    }
+                    
                     return src;
                 }).filter(Boolean);
             });
@@ -678,8 +718,45 @@ export async function extractFromSelectors(page, domain, baseUrl) {
         }
     }
 
+    // Special handling for Zara: extract from background-image styles
+    if (domain === 'zara.com' && result.images.length < 3) {
+        try {
+            const bgImages = await page.evaluate(() => {
+                const images = [];
+                // Find all elements with background-image
+                const elements = document.querySelectorAll('[style*="background-image"], [class*="product-detail"], [class*="image"]');
+                elements.forEach(el => {
+                    const style = window.getComputedStyle(el);
+                    if (style.backgroundImage && style.backgroundImage !== 'none') {
+                        const match = style.backgroundImage.match(/url\(['"]?([^'"]+)['"]?\)/);
+                        if (match && match[1] && match[1].includes('static.zara.net')) {
+                            images.push(match[1]);
+                        }
+                    }
+                    // Also check inline style
+                    if (el.style && el.style.backgroundImage) {
+                        const match = el.style.backgroundImage.match(/url\(['"]?([^'"]+)['"]?\)/);
+                        if (match && match[1] && match[1].includes('static.zara.net')) {
+                            images.push(match[1]);
+                        }
+                    }
+                });
+                return [...new Set(images)];
+            });
+            
+            if (bgImages && bgImages.length > 0) {
+                const resolvedBgImages = bgImages
+                    .map(url => resolveUrl(url, baseUrl))
+                    .filter(Boolean);
+                result.images = [...new Set([...result.images, ...resolvedBgImages])];
+            }
+        } catch (e) {
+            // Ignore
+        }
+    }
+
     // Fallback: try to extract images from JSON data in page
-    if (result.images.length === 0) {
+    if (result.images.length < 3) {
         try {
             // Try to extract from window.__INITIAL_STATE__ or similar
             const imageData = await page.evaluate(() => {
@@ -688,36 +765,114 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                     window.__PRELOADED_STATE__,
                     window.productData,
                     window.product,
-                    window.productImages
+                    window.productImages,
+                    window.__NEXT_DATA__
                 ];
+                
+                const foundImages = [];
                 
                 for (const data of patterns) {
                     if (data && typeof data === 'object') {
                         // Try common image paths
-                        const images = data.images || 
-                                     data.productImages || 
-                                     data.gallery || 
-                                     data.media?.images ||
-                                     data.media?.gallery;
+                        let images = data.images || 
+                                   data.productImages || 
+                                   data.gallery || 
+                                   data.media?.images ||
+                                   data.media?.gallery ||
+                                   data.product?.images ||
+                                   data.product?.gallery ||
+                                   data.detail?.images;
+                        
+                        // If it's a nested structure, try to find images recursively
+                        if (!images) {
+                            const findImages = (obj, depth = 0) => {
+                                if (depth > 3 || !obj || typeof obj !== 'object') return [];
+                                const result = [];
+                                for (const key in obj) {
+                                    if (key.toLowerCase().includes('image') || key.toLowerCase().includes('gallery')) {
+                                        if (Array.isArray(obj[key])) {
+                                            result.push(...obj[key]);
+                                        }
+                                    }
+                                    if (typeof obj[key] === 'object') {
+                                        result.push(...findImages(obj[key], depth + 1));
+                                    }
+                                }
+                                return result;
+                            };
+                            images = findImages(data);
+                        }
+                        
                         if (Array.isArray(images) && images.length > 0) {
-                            return images.map(img => {
-                                if (typeof img === 'string') return img;
-                                if (img.url) return img.url;
-                                if (img.src) return img.src;
-                                if (img.original) return img.original;
-                                return null;
-                            }).filter(Boolean);
+                            images.forEach(img => {
+                                let url = null;
+                                if (typeof img === 'string') {
+                                    url = img;
+                                } else if (img && typeof img === 'object') {
+                                    url = img.url || img.src || img.original || img.medium || img.large || img.high || img.full;
+                                }
+                                if (url && typeof url === 'string') {
+                                    foundImages.push(url);
+                                }
+                            });
                         }
                     }
                 }
-                return null;
+                
+                return foundImages.length > 0 ? [...new Set(foundImages)] : null;
             });
             
             if (imageData && Array.isArray(imageData) && imageData.length > 0) {
-                result.images = imageData
+                const resolvedImages = imageData
                     .map(url => resolveUrl(url, baseUrl))
                     .filter(Boolean);
-                result.images = [...new Set(result.images)];
+                result.images = [...new Set([...result.images, ...resolvedImages])];
+            }
+        } catch (e) {
+            // Ignore
+        }
+    }
+
+    // Additional fallback: wait for lazy-loaded images and extract them
+    if (domain === 'zara.com' && result.images.length < 6) {
+        try {
+            // Wait a bit more for lazy-loaded images
+            await page.waitForTimeout(2000);
+            
+            // Try to trigger lazy loading by scrolling
+            await page.evaluate(() => {
+                window.scrollTo(0, document.body.scrollHeight / 2);
+                return new Promise(resolve => setTimeout(resolve, 500));
+            });
+            
+            // Extract all images again after scroll
+            const lazyImages = await page.$$eval('img, [style*="background-image"]', (elements) => {
+                const images = [];
+                elements.forEach(el => {
+                    if (el.tagName === 'IMG') {
+                        const src = el.src || el.getAttribute('data-src') || el.getAttribute('data-lazy-src');
+                        if (src && src.includes('static.zara.net')) {
+                            images.push(src);
+                        }
+                    } else {
+                        // Check background-image
+                        const style = window.getComputedStyle(el);
+                        if (style.backgroundImage && style.backgroundImage !== 'none') {
+                            const match = style.backgroundImage.match(/url\(['"]?([^'"]+)['"]?\)/);
+                            if (match && match[1] && match[1].includes('static.zara.net')) {
+                                images.push(match[1]);
+                            }
+                        }
+                    }
+                });
+                return [...new Set(images)];
+            });
+            
+            if (lazyImages && lazyImages.length > 0) {
+                const resolvedLazyImages = lazyImages
+                    .map(url => resolveUrl(url, baseUrl))
+                    .filter(Boolean);
+                result.images = [...new Set([...result.images, ...resolvedLazyImages])];
             }
         } catch (e) {
             // Ignore
