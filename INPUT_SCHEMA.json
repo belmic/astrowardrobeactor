@@ -23,7 +23,6 @@
         "useApifyProxy": {
           "title": "Use Apify Proxy",
           "type": "boolean",
-          "default": true,
           "description": "Use Apify residential proxy"
         },
         "apifyProxyGroups": {
@@ -33,9 +32,6 @@
           "editor": "stringList"
         }
       },
-      "default": {
-        "useApifyProxy": true
-      }
     },
     "maxConcurrency": {
       "title": "Max Concurrency",
