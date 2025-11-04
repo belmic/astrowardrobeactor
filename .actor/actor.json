@@ -9,7 +9,7 @@
     "memoryMbytes": 2048,
     "build": "npm install"
   },
-  "input": ".actor/INPUT_SCHEMA.json",
+  "input": "../INPUT_SCHEMA.json",
   "storages": {
     "dataset": "./.actor/dataset_schema.json"
   }
