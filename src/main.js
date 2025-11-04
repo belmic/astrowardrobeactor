@@ -77,20 +77,30 @@ Actor.main(async () => {
             console.log(`Processing: ${url}`);
 
             try {
-                // Navigate to page
+                // Navigate to page with longer timeout for slow sites
+                const navigationTimeout = Math.max(timeoutSecs * 1000, 120000); // At least 120 seconds
+                
                 await page.goto(url, {
-                    waitUntil,
-                    timeout: timeoutSecs * 1000
+                    waitUntil: 'domcontentloaded', // Use domcontentloaded instead of networkidle for faster loading
+                    timeout: navigationTimeout
+                }).catch(async (error) => {
+                    console.warn(`Navigation timeout/error, trying with load state: ${error.message}`);
+                    // Try to wait for at least some content
+                    await page.waitForLoadState('domcontentloaded', { timeout: 30000 }).catch(() => {});
                 });
 
-                // Wait for page to be ready
-                await page.waitForLoadState('networkidle', { timeout: timeoutSecs * 1000 }).catch(() => {
-                    // Continue even if networkidle times out
+                // Wait for page to be ready (try multiple strategies)
+                await page.waitForLoadState('domcontentloaded', { timeout: 30000 }).catch(() => {
+                    console.warn(`DOM content loaded timeout for ${url}, continuing...`);
+                });
+
+                // Wait for network to be idle (but don't fail if it times out)
+                await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {
                     console.warn(`Network idle timeout for ${url}, continuing...`);
                 });
 
-                // Wait a bit more for dynamic content
-                await page.waitForTimeout(2000);
+                // Wait a bit more for dynamic content (especially for Zara which loads content via JS)
+                await page.waitForTimeout(5000);
 
                 // Extract product data
                 const productData = await extractProductData(page, url);
