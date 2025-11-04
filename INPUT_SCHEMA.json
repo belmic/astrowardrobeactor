@@ -28,8 +28,7 @@
         "apifyProxyGroups": {
           "title": "Apify Proxy Groups",
           "type": "array",
-          "description": "Specific proxy groups to use",
-          "editor": "stringList"
+          "description": "Specific proxy groups to use"
         }
       },
     },
