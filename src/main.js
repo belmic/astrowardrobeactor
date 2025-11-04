@@ -46,18 +46,32 @@ Actor.main(async () => {
             },
             launcher: async (launchOptions) => {
                 const { chromium } = await import('playwright');
-                return chromium.launch(launchOptions);
-            },
-            contextOptions: {
-                userAgent: userAgent,
-                viewport: {
-                    width: mobileUserAgent ? 390 : 1920,
-                    height: mobileUserAgent ? 844 : 1080
-                }
+                const browser = await chromium.launch(launchOptions);
+                return browser;
             }
         },
         preNavigationHooks: [
-            async ({ page, request }) => {
+            async ({ page, request, context }) => {
+                // Set user agent via context route interception before navigation
+                await page.route('**/*', async (route) => {
+                    const headers = {
+                        ...route.request().headers(),
+                        'User-Agent': userAgent
+                    };
+                    await route.continue({ headers });
+                });
+
+                // Set viewport
+                try {
+                    await page.setViewportSize({
+                        width: mobileUserAgent ? 390 : 1920,
+                        height: mobileUserAgent ? 844 : 1080
+                    });
+                } catch (e) {
+                    // Viewport might already be set
+                    console.warn('Could not set viewport:', e.message);
+                }
+
                 // Random delay for throttling
                 await randomDelay(300, 900);
             }
