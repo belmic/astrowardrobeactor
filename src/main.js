@@ -43,16 +43,11 @@ Actor.main(async () => {
             launchOptions: {
                 headless: true,
                 args: ['--no-sandbox', '--disable-setuid-sandbox']
-            },
-            launcher: async (launchOptions) => {
-                const { chromium } = await import('playwright');
-                const browser = await chromium.launch(launchOptions);
-                return browser;
             }
         },
         preNavigationHooks: [
-            async ({ page, request, context }) => {
-                // Set user agent via context route interception before navigation
+            async ({ page, request }) => {
+                // Set user agent via route interception before navigation
                 await page.route('**/*', async (route) => {
                     const headers = {
                         ...route.request().headers(),
