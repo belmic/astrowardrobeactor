@@ -1,69 +1,65 @@
 {
   "actorSpecification": 1,
-  "title": "Fashion Product Data",
-  "type": "object",
-  "schemaVersion": 1,
-  "properties": {
-    "url": {
-      "title": "URL",
-      "type": "string",
-      "description": "Original product URL"
-    },
-    "domain": {
-      "title": "Domain",
-      "type": "string",
-      "description": "Extracted domain name"
-    },
-    "title": {
-      "title": "Title",
-      "type": "string",
-      "description": "Product title"
-    },
-    "description": {
-      "title": "Description",
-      "type": "string",
-      "description": "Product description"
-    },
-    "price": {
-      "title": "Price",
-      "type": "number",
-      "description": "Product price as number"
-    },
-    "currency": {
-      "title": "Currency",
-      "type": "string",
-      "description": "ISO currency code"
-    },
-    "sku": {
-      "title": "SKU",
-      "type": "string",
-      "description": "Product SKU/ID"
-    },
-    "images": {
-      "title": "Images",
-      "type": "array",
-      "description": "Array of image URLs",
-      "items": {
-        "type": "string"
-      }
-    },
-    "raw": {
-      "title": "Raw Data",
-      "type": "object",
-      "description": "Raw extraction metadata",
-      "properties": {
-        "jsonLd": {
-          "title": "JSON-LD",
-          "type": "object",
-          "description": "Parsed JSON-LD object if found"
-        },
-        "detectedApi": {
-          "title": "Detected API",
+  "views": [
+    {
+      "title": "Fashion Product Data",
+      "fields": [
+        {
+          "id": "url",
           "type": "string",
-          "description": "Detection method used"
+          "title": "URL",
+          "description": "Original product URL"
+        },
+        {
+          "id": "domain",
+          "type": "string",
+          "title": "Domain",
+          "description": "Extracted domain name"
+        },
+        {
+          "id": "title",
+          "type": "string",
+          "title": "Title",
+          "description": "Product title"
+        },
+        {
+          "id": "description",
+          "type": "string",
+          "title": "Description",
+          "description": "Product description"
+        },
+        {
+          "id": "price",
+          "type": "number",
+          "title": "Price",
+          "description": "Product price as number"
+        },
+        {
+          "id": "currency",
+          "type": "string",
+          "title": "Currency",
+          "description": "ISO currency code"
+        },
+        {
+          "id": "sku",
+          "type": "string",
+          "title": "SKU",
+          "description": "Product SKU/ID"
+        },
+        {
+          "id": "images",
+          "type": "array",
+          "title": "Images",
+          "description": "Array of image URLs"
+        },
+        {
+          "id": "raw",
+          "type": "object",
+          "title": "Raw Data",
+          "description": "Raw extraction metadata"
         }
-      }
+      ]
     }
-  }
+  ]
 }
 
