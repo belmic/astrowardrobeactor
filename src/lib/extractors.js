@@ -72,7 +72,18 @@ const DOMAIN_SELECTORS = {
             '.product-price-current',
             '[data-price]',
             '.money-amount',
-            '.product-price-value'
+            '.product-price-value',
+            '.price-value',
+            '.current-price',
+            '[data-price-value]',
+            '.product-price-final',
+            '.price-final',
+            '.money-value',
+            'span[class*="price"]',
+            'div[class*="price"]',
+            'p[class*="price"]',
+            '[itemprop="price"]',
+            'meta[property="product:price:amount"]'
         ],
         currency: [
             '.product-price',
@@ -364,6 +375,15 @@ export function extractFromEmbeddedJson(embeddedJson, baseUrl) {
         if (variant.price !== undefined || variant.priceValue !== undefined) {
             result.price = extractPrice(variant.price || variant.priceValue);
         }
+    } else if (product.currentPrice !== undefined || product.salePrice !== undefined) {
+        const priceValue = product.currentPrice || product.salePrice;
+        result.price = extractPrice(priceValue);
+    } else if (product.priceInfo) {
+        const priceInfo = product.priceInfo;
+        if (priceInfo.price !== undefined || priceInfo.finalPrice !== undefined || priceInfo.currentPrice !== undefined) {
+            const priceValue = priceInfo.price || priceInfo.finalPrice || priceInfo.currentPrice;
+            result.price = extractPrice(priceValue);
+        }
     }
 
     // Currency
@@ -478,22 +498,63 @@ export async function extractFromSelectors(page, domain, baseUrl) {
         try {
             const element = await page.$(selector);
             if (element) {
-                const text = await element.textContent();
+                // Try textContent first
+                let text = await element.textContent();
+                if (!text || !text.trim()) {
+                    // Try innerText for better text extraction
+                    text = await element.innerText().catch(() => null);
+                }
+                if (!text || !text.trim()) {
+                    // Try data attribute
+                    const dataPrice = await element.getAttribute('data-price') || 
+                                    await element.getAttribute('data-price-value') ||
+                                    await element.getAttribute('content');
+                    if (dataPrice) {
+                        text = dataPrice;
+                    }
+                }
                 if (text && text.trim()) {
                     const price = extractPrice(text);
                     if (price !== null) {
                         result.price = price;
+                        // Try to extract currency from the same element
+                        const currency = normalizeCurrency(text);
+                        if (currency) {
+                            result.currency = currency;
+                        }
+                        break;
                     }
-                    // Try to extract currency from the same element
-                    const currency = normalizeCurrency(text);
-                    if (currency) {
-                        result.currency = currency;
-                    }
-                    break;
                 }
             }
         } catch (e) {
             // Continue to next selector
+        }
+    }
+    
+    // For Mango, try to extract price from meta tags if still missing
+    if ((domain === 'shop.mango.com' || domain === 'mango.com') && !result.price) {
+        try {
+            // Try meta tags for price
+            const metaPrice = await page.$eval('meta[property="product:price:amount"]', el => el.getAttribute('content')).catch(() => null);
+            if (metaPrice) {
+                const price = extractPrice(metaPrice);
+                if (price !== null) {
+                    result.price = price;
+                }
+            }
+            // Try itemprop="price"
+            const itempropPrice = await page.$eval('[itemprop="price"]', el => {
+                const content = el.getAttribute('content') || el.textContent;
+                return content;
+            }).catch(() => null);
+            if (itempropPrice) {
+                const price = extractPrice(itempropPrice);
+                if (price !== null) {
+                    result.price = price;
+                }
+            }
+        } catch (e) {
+            // Ignore
         }
     }
 
@@ -886,8 +947,9 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                     }
                 }
                 
-                // Also try to extract description from __NEXT_DATA__ for Mango
+                // Also try to extract description and price from __NEXT_DATA__ for Mango
                 const foundDescription = [];
+                const foundPrice = [];
                 if (window.__NEXT_DATA__ && window.__NEXT_DATA__.props) {
                     const findDescription = (obj, depth = 0) => {
                         if (depth > 5 || !obj || typeof obj !== 'object') return null;
@@ -904,9 +966,28 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                         }
                         return null;
                     };
+                    const findPrice = (obj, depth = 0) => {
+                        if (depth > 5 || !obj || typeof obj !== 'object') return null;
+                        for (const key in obj) {
+                            if ((key === 'price' || key === 'finalPrice' || key === 'currentPrice' || 
+                                 key === 'priceValue' || key === 'salePrice') && 
+                                (typeof obj[key] === 'number' || (typeof obj[key] === 'string' && obj[key].trim()))) {
+                                return obj[key];
+                            }
+                            if (typeof obj[key] === 'object') {
+                                const price = findPrice(obj[key], depth + 1);
+                                if (price !== null && price !== undefined) return price;
+                            }
+                        }
+                        return null;
+                    };
                     const desc = findDescription(window.__NEXT_DATA__.props);
                     if (desc) {
                         foundDescription.push(desc);
+                    }
+                    const price = findPrice(window.__NEXT_DATA__.props);
+                    if (price !== null && price !== undefined) {
+                        foundPrice.push(price);
                     }
                 }
                 
@@ -976,7 +1057,8 @@ export async function extractFromSelectors(page, domain, baseUrl) {
                 
                 return {
                     images: foundImages.length > 0 ? [...new Set(foundImages)] : null,
-                    description: foundDescription.length > 0 ? foundDescription[0] : null
+                    description: foundDescription.length > 0 ? foundDescription[0] : null,
+                    price: foundPrice.length > 0 ? foundPrice[0] : null
                 };
             });
             
@@ -984,6 +1066,15 @@ export async function extractFromSelectors(page, domain, baseUrl) {
             if ((domain === 'shop.mango.com' || domain === 'mango.com') && 
                 extractedData && extractedData.description && !result.description) {
                 result.description = normalizeEmpty(extractedData.description);
+            }
+            
+            // Extract price for Mango if found
+            if ((domain === 'shop.mango.com' || domain === 'mango.com') && 
+                extractedData && extractedData.price !== null && extractedData.price !== undefined && !result.price) {
+                const price = extractPrice(extractedData.price);
+                if (price !== null) {
+                    result.price = price;
+                }
             }
             
             const imageData = extractedData?.images;
@@ -1166,8 +1257,9 @@ export async function extractProductData(page, url) {
     }
 
     // If we got basic data, try to enhance with embedded JSON
-    // For Mango, always try to get description from JSON
-    if (!result.title || !result.price || (domain === 'shop.mango.com' || domain === 'mango.com') && !result.description) {
+    // For Mango, always try to get description and price from JSON
+    if (!result.title || !result.price || 
+        ((domain === 'shop.mango.com' || domain === 'mango.com') && (!result.description || !result.price))) {
         const embeddedJson = await extractEmbeddedJson(page);
         if (embeddedJson) {
             const embeddedData = extractFromEmbeddedJson(embeddedJson, url);
