@@ -6,7 +6,7 @@ import { getMobileUserAgent, getDesktopUserAgent, randomDelay } from './lib/util
 /**
  * Main entry point for the Fashion PDP Scraper Actor
  */
-await Actor.main(async () => {
+Actor.main(async () => {
     const input = await Actor.getInput();
     
     const {
