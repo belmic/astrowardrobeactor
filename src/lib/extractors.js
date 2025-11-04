@@ -18,9 +18,18 @@ const DOMAIN_SELECTORS = {
     'zara.com': {
         title: ['h1.product-detail-info__header-name', '[data-testid="product-title"]', 'h1'],
         description: ['.product-detail-description', '[data-testid="product-description"]', '.product-description'],
-        price: ['.product-detail-info__price', '[data-testid="price"]', '.price'],
-        sku: ['[data-product-id]', '[data-sku]', '.sku'],
-        images: ['.product-detail-images img', '[data-testid="product-image"] img', '.product-image img']
+        price: ['.product-detail-info__price', '[data-testid="price"]', '.price', '.money-amount__main'],
+        currency: ['.product-detail-info__price', '[data-testid="price"]', '.price', '.money-amount__main', '[data-currency]'],
+        sku: ['[data-product-id]', '[data-sku]', '.product-reference', '[data-product-reference]'],
+        images: [
+            'img.product-detail-images__image', 
+            '.product-detail-images img', 
+            '[data-testid="product-image"] img', 
+            '.product-image img',
+            'img[src*="product"]',
+            '.media-image img',
+            'picture img'
+        ]
     },
     'shop.mango.com': {
         title: ['h1.product-title', '.product-name h1', 'h1'],
@@ -392,6 +401,50 @@ export async function extractFromSelectors(page, domain, baseUrl) {
         }
     }
 
+    // Extract currency separately if not found in price (for Zara and other sites)
+    if (!result.currency && selectors.currency) {
+        for (const selector of selectors.currency) {
+            try {
+                const element = await page.$(selector);
+                if (element) {
+                    // Try data attribute first
+                    const currencyAttr = await element.getAttribute('data-currency') || 
+                                        await element.getAttribute('currency') ||
+                                        await element.getAttribute('data-currency-code');
+                    if (currencyAttr) {
+                        result.currency = normalizeCurrency(currencyAttr);
+                        if (result.currency) break;
+                    }
+                    // Try from text content
+                    const text = await element.textContent();
+                    if (text && text.trim()) {
+                        const currency = normalizeCurrency(text);
+                        if (currency) {
+                            result.currency = currency;
+                            break;
+                        }
+                    }
+                }
+            } catch (e) {
+                // Continue to next selector
+            }
+        }
+    }
+
+    // Fallback: try to extract currency from page meta or URL
+    if (!result.currency) {
+        try {
+            // Try meta tags
+            const metaCurrency = await page.$eval('meta[property="product:price:currency"]', el => el.content).catch(() => null) ||
+                                await page.$eval('meta[name="currency"]', el => el.content).catch(() => null);
+            if (metaCurrency) {
+                result.currency = normalizeCurrency(metaCurrency);
+            }
+        } catch (e) {
+            // Ignore
+        }
+    }
+
     // Extract SKU
     for (const selector of selectors.sku) {
         try {
@@ -414,17 +467,73 @@ export async function extractFromSelectors(page, domain, baseUrl) {
     for (const selector of selectors.images) {
         try {
             const imageUrls = await page.$$eval(selector, (imgs) => {
-                return imgs.map(img => img.src || img.getAttribute('data-src') || img.getAttribute('data-lazy-src'))
-                    .filter(Boolean);
+                return imgs.map(img => {
+                    // Try multiple sources: src, data-src, data-lazy-src, data-original, srcset
+                    const src = img.src || 
+                                img.getAttribute('data-src') || 
+                                img.getAttribute('data-lazy-src') ||
+                                img.getAttribute('data-original') ||
+                                img.getAttribute('data-srcset') ||
+                                (img.srcset ? img.srcset.split(',')[0].trim().split(' ')[0] : null);
+                    return src;
+                }).filter(Boolean);
             });
             if (imageUrls && imageUrls.length > 0) {
                 result.images = imageUrls
                     .map(url => resolveUrl(url, baseUrl))
                     .filter(Boolean);
-                break;
+                // Remove duplicates
+                result.images = [...new Set(result.images)];
+                if (result.images.length > 0) break;
             }
         } catch (e) {
             // Continue to next selector
+        }
+    }
+
+    // Fallback: try to extract images from JSON data in page
+    if (result.images.length === 0) {
+        try {
+            // Try to extract from window.__INITIAL_STATE__ or similar
+            const imageData = await page.evaluate(() => {
+                const patterns = [
+                    window.__INITIAL_STATE__,
+                    window.__PRELOADED_STATE__,
+                    window.productData,
+                    window.product,
+                    window.productImages
+                ];
+                
+                for (const data of patterns) {
+                    if (data && typeof data === 'object') {
+                        // Try common image paths
+                        const images = data.images || 
+                                     data.productImages || 
+                                     data.gallery || 
+                                     data.media?.images ||
+                                     data.media?.gallery;
+                        if (Array.isArray(images) && images.length > 0) {
+                            return images.map(img => {
+                                if (typeof img === 'string') return img;
+                                if (img.url) return img.url;
+                                if (img.src) return img.src;
+                                if (img.original) return img.original;
+                                return null;
+                            }).filter(Boolean);
+                        }
+                    }
+                }
+                return null;
+            });
+            
+            if (imageData && Array.isArray(imageData) && imageData.length > 0) {
+                result.images = imageData
+                    .map(url => resolveUrl(url, baseUrl))
+                    .filter(Boolean);
+                result.images = [...new Set(result.images)];
+            }
+        } catch (e) {
+            // Ignore
         }
     }
 
