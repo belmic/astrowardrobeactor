@@ -1,0 +1,27 @@
+{
+  "name": "fashion-pdp-scraper",
+  "version": "1.0.0",
+  "description": "Apify Actor for scraping fashion product detail pages (Zara, Mango, etc.)",
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "apify",
+    "actor",
+    "scraper",
+    "playwright",
+    "fashion",
+    "ecommerce"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "apify": "^3.0.0",
+    "crawlee": "^3.0.0",
+    "playwright": "^1.40.0"
+  }
+}
+
