@@ -11,7 +11,7 @@
   },
   "input": "INPUT_SCHEMA.json",
   "storages": {
-    "dataset": "./.actor/dataset_schema.json"
+    "dataset": "dataset_schema.json"
   }
 }
 

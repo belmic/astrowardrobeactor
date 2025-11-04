@@ -1,0 +1,68 @@
+{
+  "title": "Fashion Product Data",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "url": {
+      "title": "URL",
+      "type": "string",
+      "description": "Original product URL"
+    },
+    "domain": {
+      "title": "Domain",
+      "type": "string",
+      "description": "Extracted domain name"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string",
+      "description": "Product title"
+    },
+    "description": {
+      "title": "Description",
+      "type": "string",
+      "description": "Product description"
+    },
+    "price": {
+      "title": "Price",
+      "type": "number",
+      "description": "Product price as number"
+    },
+    "currency": {
+      "title": "Currency",
+      "type": "string",
+      "description": "ISO currency code"
+    },
+    "sku": {
+      "title": "SKU",
+      "type": "string",
+      "description": "Product SKU/ID"
+    },
+    "images": {
+      "title": "Images",
+      "type": "array",
+      "description": "Array of image URLs",
+      "items": {
+        "type": "string"
+      }
+    },
+    "raw": {
+      "title": "Raw Data",
+      "type": "object",
+      "description": "Raw extraction metadata",
+      "properties": {
+        "jsonLd": {
+          "title": "JSON-LD",
+          "type": "object",
+          "description": "Parsed JSON-LD object if found"
+        },
+        "detectedApi": {
+          "title": "Detected API",
+          "type": "string",
+          "description": "Detection method used"
+        }
+      }
+    }
+  }
+}
+
